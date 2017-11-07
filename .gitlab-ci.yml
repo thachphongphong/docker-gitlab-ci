@@ -1,0 +1,46 @@
+services:
+- docker:dind
+
+stages:
+- build
+#- test
+- deploy
+
+variables:
+  BUILD_IMAGE: $CI_REGISTRY_URL/$CI_REGISTRY_USER/$CI_PROJECT_NAME:$CI_PIPELINE_ID
+
+#test:
+#  stage: test
+#  script:
+#    - npm test
+#  only:
+#    - master
+#  tags:
+#    - runner
+
+build:
+  image: docker:latest
+  stage: build
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY_URL
+    - docker build --pull -t $BUILD_IMAGE .
+    - docker push $BUILD_IMAGE
+  only:
+    - master
+  tags:
+    - runner
+
+deploy:
+  image: debian:jessie
+  stage: deploy
+  script:
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - ssh-add <(echo "$SSH_PRIVATE_KEY" | base64 -d)
+    - mkdir -p ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - ssh $DEPLOY_SERVER ./deploy.sh $CI_PIPELINE_ID
+  only:
+    - master
+  tags:
+    - runner
